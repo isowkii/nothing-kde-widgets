@@ -7,43 +7,24 @@ import org.kde.kcmutils as KCM
 KCM.SimpleKCM {
     id: configImage
 
+    // Properti yang sudah ada
     property alias cfg_imagePath: imagePathField.text
     property alias cfg_imageFillMode: imageFillModeCombo.currentIndex
     property alias cfg_grayscaleEnabled: grayscaleCheckbox.checked
 
+    // Properti tambahan untuk Slideshow
+    property alias cfg_isSlideshow: slideshowCheckbox.checked
+    property alias cfg_folderPath: folderPathField.text
+    property alias cfg_slideshowInterval: intervalSpinBox.value
+
     ColumnLayout {
         spacing: 10
 
-        // Image Source Section
-        Label {
-            text: i18n("Image Source")
+        // Pilihan Mode (Single Image atau Slideshow)
+        CheckBox {
+            id: slideshowCheckbox
+            text: i18n("Enable Slideshow")
             font.bold: true
-            font.pointSize: 11
-        }
-
-        RowLayout {
-            spacing: 10
-            Layout.fillWidth: true
-
-            TextField {
-                id: imagePathField
-                Layout.fillWidth: true
-                placeholderText: i18n("Select an image file...")
-                readOnly: true
-            }
-
-            Button {
-                text: i18n("Browse...")
-                onClicked: fileDialog.open()
-            }
-        }
-
-        Label {
-            text: i18n("Select a photo to display in the widget (PNG, JPG, JPEG, WebP)")
-            font.pointSize: 9
-            opacity: 0.7
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
         }
 
         Rectangle {
@@ -53,7 +34,97 @@ KCM.SimpleKCM {
             opacity: 0.3
         }
 
-        // Image Fit Mode Section
+        // --- BAGIAN SINGLE IMAGE (Tampil jika Slideshow OFF) ---
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: !slideshowCheckbox.checked
+            spacing: 5
+
+            Label {
+                text: i18n("Image Source")
+                font.bold: true
+                font.pointSize: 11
+            }
+
+            RowLayout {
+                spacing: 10
+                Layout.fillWidth: true
+
+                TextField {
+                    id: imagePathField
+                    Layout.fillWidth: true
+                    placeholderText: i18n("Select an image file...")
+                    readOnly: true
+                }
+
+                Button {
+                    text: i18n("Browse...")
+                    onClicked: fileDialog.open()
+                }
+            }
+
+            Label {
+                text: i18n("Select a photo to display in the widget (PNG, JPG, JPEG, WebP)")
+                font.pointSize: 9
+                opacity: 0.7
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+            }
+        }
+
+        // --- BAGIAN SLIDESHOW (Tampil jika Slideshow ON) ---
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: slideshowCheckbox.checked
+            spacing: 5
+
+            Label {
+                text: i18n("Folder Source")
+                font.bold: true
+                font.pointSize: 11
+            }
+
+            RowLayout {
+                spacing: 10
+                Layout.fillWidth: true
+
+                TextField {
+                    id: folderPathField
+                    Layout.fillWidth: true
+                    placeholderText: i18n("Select a folder with images...")
+                    readOnly: true
+                }
+
+                Button {
+                    text: i18n("Browse...")
+                    onClicked: folderDialog.open()
+                }
+            }
+
+            RowLayout {
+                spacing: 10
+                Label {
+                    text: i18n("Interval (seconds):")
+                }
+                SpinBox {
+                    id: intervalSpinBox
+                    from: 1
+                    to: 3600 // Maksimal 1 jam
+                    value: 5
+                }
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            height: 1
+            color: "#333333"
+            opacity: 0.3
+            Layout.topMargin: 5
+            Layout.bottomMargin: 5
+        }
+
+        // --- Image Fit Mode Section ---
         Label {
             text: i18n("Image Fit Mode")
             font.bold: true
@@ -91,7 +162,7 @@ KCM.SimpleKCM {
             opacity: 0.3
         }
 
-        // Effects Section
+        // --- Effects Section ---
         Label {
             text: i18n("Effects")
             font.bold: true
@@ -118,12 +189,22 @@ KCM.SimpleKCM {
         }
     }
 
+    // Dialog Gambar Tunggal
     FileDialog {
         id: fileDialog
         title: i18n("Select an Image")
         nameFilters: ["Image files (*.png *.jpg *.jpeg *.webp *.bmp *.gif)"]
         onAccepted: {
             imagePathField.text = fileDialog.selectedFile
+        }
+    }
+
+    // Dialog Folder untuk Slideshow
+    FolderDialog {
+        id: folderDialog
+        title: i18n("Select Image Folder")
+        onAccepted: {
+            folderPathField.text = folderDialog.selectedFolder
         }
     }
 }

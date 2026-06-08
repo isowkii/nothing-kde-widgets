@@ -49,7 +49,7 @@
 Clone the repository and run the install script:
 
 ```bash
-git clone https://github.com/jaxparrow07/nothing-kde-widgets.git
+git clone https://github.com/isowkii/nothing-kde-widgets.git
 cd nothing-kde-widgets
 ```
 

@@ -4,6 +4,7 @@ import QtQuick.Effects
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
+import Qt.labs.folderlistmodel // Tambahan untuk slideshow
 import "components"
 
 PlasmoidItem {
@@ -26,44 +27,62 @@ PlasmoidItem {
     property int imageFillMode: plasmoid.configuration.imageFillMode
     property bool grayscaleEnabled: plasmoid.configuration.grayscaleEnabled
 
-    // Calculate the appropriate corner radius for outer background
-    readonly property real outerRadius: {
-        if (!pillShapeEnabled) {
-            return 20  // Standard rounded corners
+    // Konfigurasi Slideshow
+    property bool isSlideshow: plasmoid.configuration.isSlideshow || false
+    property string folderPath: plasmoid.configuration.folderPath || ""
+    property int slideshowInterval: plasmoid.configuration.slideshowInterval || 5 // dalam detik
+
+    // Properti Internal Slideshow
+    property int _currentIndex: 0
+    property string _currentSlideshowImage: ""
+    property string activeImagePath: isSlideshow ? _currentSlideshowImage : imagePath
+
+    FolderListModel {
+        id: folderModel
+        folder: root.folderPath ? (root.folderPath.startsWith("file://") ? root.folderPath : "file://" + root.folderPath) : ""
+        nameFilters: ["*.png", "*.jpg", "*.jpeg", "*.webp", "*.bmp", "*.gif"]
+        showDirs: false
+        onCountChanged: {
+            if (count > 0 && root.isSlideshow) {
+                root._currentIndex = 0;
+                root._currentSlideshowImage = String(folderModel.get(root._currentIndex, "fileUrl"));
+            }
         }
-
-        // Pill shape logic for outer background
-        var w = root.width
-        var h = root.height
-        var aspectRatio = w / h
-
-        // If nearly square (within 10% tolerance), make it a circle
-        if (aspectRatio >= 0.9 && aspectRatio <= 1.1) {
-            return Math.min(w, h) / 2
-        }
-
-        // Horizontal pill (wider than tall)
-        if (w > h) {
-            return h / 2
-        }
-
-        // Vertical pill (taller than wide)
-        return w / 2
     }
 
-    // Calculate the appropriate corner radius for inner content (respects border)
-    // Formula: Border radius of inner = Border radius of outer - margin
+    Timer {
+        id: slideshowTimer
+        interval: root.slideshowInterval * 1000
+        running: root.isSlideshow && folderModel.count > 1
+        repeat: true
+        onTriggered: {
+            root._currentIndex = (root._currentIndex + 1) % folderModel.count;
+            root._currentSlideshowImage = String(folderModel.get(root._currentIndex, "fileUrl"));
+        }
+    }
+
+    readonly property real outerRadius: {
+        if (!pillShapeEnabled) return 20
+
+            var w = root.width
+            var h = root.height
+            var aspectRatio = w / h
+
+            if (aspectRatio >= 0.9 && aspectRatio <= 1.1) return Math.min(w, h) / 2
+                if (w > h) return h / 2
+                    return w / 2
+    }
+
     readonly property real calculatedRadius: {
         var margin = borderEnabled ? borderSize : 0
         return Math.max(0, outerRadius - margin)
     }
 
-    // Map config value to QML fillMode
     readonly property int qmlFillMode: {
         switch(imageFillMode) {
-            case 0: return Image.PreserveAspectCrop  // Crop (Fill Frame)
-            case 1: return Image.PreserveAspectFit   // Fit (Show All)
-            case 2: return Image.Stretch             // Stretch
+            case 0: return Image.PreserveAspectCrop
+            case 1: return Image.PreserveAspectFit
+            case 2: return Image.Stretch
             default: return Image.PreserveAspectCrop
         }
     }
@@ -75,7 +94,6 @@ PlasmoidItem {
         Layout.minimumHeight: 200
         anchors.margins: 10
 
-        // Outer background rectangle (always visible to show the border)
         Rectangle {
             id: outerBackground
             anchors.fill: parent
@@ -84,7 +102,6 @@ PlasmoidItem {
             radius: root.outerRadius
         }
 
-        // Main content rectangle with configurable margin
         Rectangle {
             id: mainRect
             anchors.fill: parent
@@ -93,17 +110,15 @@ PlasmoidItem {
             radius: root.calculatedRadius
             clip: true
 
-            // Source image (hidden, used for masking)
             Image {
                 id: photoImage
                 anchors.fill: parent
                 source: {
-                    if (!root.imagePath) return ""
-                    if (root.imagePath.startsWith("/") || root.imagePath.startsWith("file://")) {
-                        return root.imagePath
-                    }
-                    // Relative path from contents/ui to contents/default
-                    return Qt.resolvedUrl("../" + root.imagePath)
+                    if (!root.activeImagePath) return ""
+                        if (root.activeImagePath.startsWith("/") || root.activeImagePath.startsWith("file://")) {
+                            return root.activeImagePath
+                        }
+                        return Qt.resolvedUrl("../" + root.activeImagePath)
                 }
                 fillMode: root.qmlFillMode
                 smooth: true
@@ -112,7 +127,6 @@ PlasmoidItem {
                 cache: true
             }
 
-            // Mask for rounded corners
             Item {
                 id: roundedMask
                 anchors.fill: parent
@@ -126,7 +140,6 @@ PlasmoidItem {
                 }
             }
 
-            // Background layer (blocks anything beneath if needed)
             Rectangle {
                 anchors.fill: parent
                 color: nColors.background
@@ -134,7 +147,6 @@ PlasmoidItem {
                 z: 1
             }
 
-            // Photo effects layer
             Item {
                 anchors.fill: parent
                 z: 2
@@ -145,14 +157,13 @@ PlasmoidItem {
                     source: photoImage
                     maskEnabled: true
                     maskSource: roundedMask
-                    visible: root.imagePath !== ""
+                    visible: root.activeImagePath !== ""
                 }
 
-                // Grayscale overlay
                 MultiEffect {
                     anchors.fill: parent
                     source: photoEffect
-                    visible: root.grayscaleEnabled && root.imagePath !== ""
+                    visible: root.grayscaleEnabled && root.activeImagePath !== ""
                     colorization: 1.0
                     colorizationColor: "#808080"
                     brightness: 0.5
@@ -160,12 +171,11 @@ PlasmoidItem {
                 }
             }
 
-            // Fallback when no image is selected
             Rectangle {
                 anchors.fill: parent
                 color: nColors.surface
                 radius: root.calculatedRadius
-                visible: root.imagePath === ""
+                visible: root.activeImagePath === ""
                 z: 2
 
                 ColumnLayout {
@@ -187,26 +197,14 @@ PlasmoidItem {
                         color: nColors.textDisabled
                         visible: mainRect.width > 120 && mainRect.height > 120
                     }
-
-                    Text {
-                        Layout.alignment: Qt.AlignHCenter
-                        Layout.preferredWidth: Math.min(parent.parent.width * 0.7, 150)
-                        text: i18n("Right-click to configure")
-                        font.pixelSize: 10
-                        color: nColors.textDisabled
-                        wrapMode: Text.WordWrap
-                        horizontalAlignment: Text.AlignHCenter
-                        visible: mainRect.width > 150 && mainRect.height > 150
-                    }
                 }
             }
 
-            // Error state when image fails to load
             Rectangle {
                 anchors.fill: parent
                 color: nColors.surface
                 radius: root.calculatedRadius
-                visible: root.imagePath !== "" && photoImage.status === Image.Error
+                visible: root.activeImagePath !== "" && photoImage.status === Image.Error
                 z: 3
 
                 ColumnLayout {
@@ -227,17 +225,6 @@ PlasmoidItem {
                         font.pixelSize: 14
                         color: nColors.error
                         visible: mainRect.width > 120 && mainRect.height > 120
-                    }
-
-                    Text {
-                        Layout.alignment: Qt.AlignHCenter
-                        Layout.preferredWidth: Math.min(parent.parent.width * 0.7, 150)
-                        text: i18n("Failed to load image")
-                        font.pixelSize: 10
-                        color: nColors.textMuted
-                        wrapMode: Text.WordWrap
-                        horizontalAlignment: Text.AlignHCenter
-                        visible: mainRect.width > 150 && mainRect.height > 150
                     }
                 }
             }
