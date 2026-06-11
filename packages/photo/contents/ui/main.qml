@@ -4,7 +4,7 @@ import QtQuick.Effects
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
-import Qt.labs.folderlistmodel // Tambahan untuk slideshow
+import Qt.labs.folderlistmodel
 import "components"
 
 PlasmoidItem {
@@ -27,15 +27,32 @@ PlasmoidItem {
     property int imageFillMode: plasmoid.configuration.imageFillMode
     property bool grayscaleEnabled: plasmoid.configuration.grayscaleEnabled
 
-    // Konfigurasi Slideshow
+    // Slideshow Configuration
     property bool isSlideshow: plasmoid.configuration.isSlideshow || false
     property string folderPath: plasmoid.configuration.folderPath || ""
-    property int slideshowInterval: plasmoid.configuration.slideshowInterval || 5 // dalam detik
+    property int slideshowInterval: plasmoid.configuration.slideshowInterval || 5 // in seconds
 
-    // Properti Internal Slideshow
+    // Slideshow Internal Properties
     property int _currentIndex: 0
+    property var _shuffledIndices: [] // Stores randomized indices
     property string _currentSlideshowImage: ""
     property string activeImagePath: isSlideshow ? _currentSlideshowImage : imagePath
+
+    // Helper function to generate a randomized array of indices
+    function _generateRandomIndices(count) {
+        var indices = [];
+        for (var i = 0; i < count; i++) {
+            indices.push(i);
+        }
+        // Fisher-Yates shuffle algorithm
+        for (var j = indices.length - 1; j > 0; j--) {
+            var k = Math.floor(Math.random() * (j + 1));
+            var temp = indices[j];
+            indices[j] = indices[k];
+            indices[k] = temp;
+        }
+        return indices;
+    }
 
     FolderListModel {
         id: folderModel
@@ -44,8 +61,11 @@ PlasmoidItem {
         showDirs: false
         onCountChanged: {
             if (count > 0 && root.isSlideshow) {
+                // Initialize shuffle array and set the first random image
+                root._shuffledIndices = root._generateRandomIndices(count);
                 root._currentIndex = 0;
-                root._currentSlideshowImage = String(folderModel.get(root._currentIndex, "fileUrl"));
+                var targetIndex = root._shuffledIndices[root._currentIndex];
+                root._currentSlideshowImage = String(folderModel.get(targetIndex, "fileUrl"));
             }
         }
     }
@@ -56,8 +76,19 @@ PlasmoidItem {
         running: root.isSlideshow && folderModel.count > 1
         repeat: true
         onTriggered: {
-            root._currentIndex = (root._currentIndex + 1) % folderModel.count;
-            root._currentSlideshowImage = String(folderModel.get(root._currentIndex, "fileUrl"));
+            if (folderModel.count === 0) return;
+
+            root._currentIndex++;
+
+            // Re-shuffle when all images in the list have been displayed once
+            if (root._currentIndex >= folderModel.count) {
+                root._shuffledIndices = root._generateRandomIndices(folderModel.count);
+                root._currentIndex = 0;
+            }
+
+            // Get the actual file index from the shuffled array
+            var targetIndex = root._shuffledIndices[root._currentIndex];
+            root._currentSlideshowImage = String(folderModel.get(targetIndex, "fileUrl"));
         }
     }
 
